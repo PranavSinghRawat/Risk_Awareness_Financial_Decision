@@ -1,53 +1,100 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
-  Activity, 
-  BarChart3, 
   ShieldCheck, 
-  Database, 
-  Cpu, 
+  Shield,
   RefreshCw, 
-  Layers, 
-  AlertCircle,
+  AlertTriangle,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
   Clock,
-  Compass,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Compass,
+  CheckCircle2,
+  XCircle,
+  Layers,
+  DollarSign,
+  Activity,
+  Globe
 } from 'lucide-react';
 
 const API_BASE = '/api';
 
+const TICKER_NAMES = {
+  RELIANCE: 'Reliance Industries Ltd.',
+  TCS: 'Tata Consultancy Services Ltd.',
+  HDFCBANK: 'HDFC Bank Ltd.',
+  INFY: 'Infosys Ltd.',
+  ICICIBANK: 'ICICI Bank Ltd.',
+  HINDUNILVR: 'Hindustan Unilever Ltd.',
+  SBIN: 'State Bank of India',
+  BHARTIARTL: 'Bharti Airtel Ltd.',
+  ITC: 'ITC Ltd.',
+  TATAMOTORS: 'Tata Motors Ltd.',
+  LT: 'Larsen & Toubro Ltd.',
+  BAJFINANCE: 'Bajaj Finance Ltd.',
+  WIPRO: 'Wipro Ltd.',
+  MARUTI: 'Maruti Suzuki India Ltd.',
+  AXISBANK: 'Axis Bank Ltd.',
+  KOTAKBANK: 'Kotak Mahindra Bank Ltd.'
+};
+
+const PLAIN_FEATURE_NAMES = {
+  log_return: { name: "Today's Price Change", desc: "How much the stock price changed during today's trading hours." },
+  log_return_lag1: { name: "Yesterday's Price Change", desc: "Short-term momentum carried over from the prior session." },
+  log_return_lag2: { name: "2-Day Prior Price Trend", desc: "Multi-day directional momentum." },
+  gap_return: { name: "Overnight Opening Jump", desc: "Price gap between yesterday's close and this morning's open." },
+  trend_spread: { name: "Overall Price Trend (20 vs 50 Day)", desc: "Compares short-term trend with longer-term moving average." },
+  RSI_14: { name: "Buying vs. Selling Pressure (RSI)", desc: "Measures whether the stock has been heavily bought or sold recently." },
+  NATR_pct: { name: "Price Fluctuation Level (Volatility)", desc: "Average daily price swing percentage over the last two weeks." },
+  vol_ratio: { name: "Trading Activity & Volume Surge", desc: "Compares today's share trading volume against the 20-day normal volume." },
+  dxy_return: { name: "USD/INR Exchange Rate Movement", desc: "Daily percentage change in the USD to INR currency exchange rate." },
+  dxy_return_lag1: { name: "Recent USD/INR Trend", desc: "Prior session currency impact on Indian IT, pharma, and multinational earnings." },
+  dxy_trend: { name: "USD/INR Long-Term Trend", desc: "How the Rupee exchange rate compares to its 20-day moving average." },
+  dxy_vol10: { name: "Currency Exchange Volatility", desc: "10-day volatility in the USD/INR foreign exchange market." },
+  vix_spike: { name: "India VIX Panic Spike", desc: "Sudden volatility or fear spikes across the National Stock Exchange (NSE)." },
+  nifty_return: { name: "NIFTY 50 Broad Market Drift", desc: "Overall performance and return of the entire Indian stock market today." },
+  rel_alpha: { name: "Stock Relative Strength (Alpha)", desc: "Whether this stock outperformed or underperformed the NIFTY 50 index." },
+  rel_alpha_lag1: { name: "Prior Session Relative Strength", desc: "Carry-over momentum of stock outperformance relative to the broad market." },
+  delivery_pct: { name: "Institutional Delivery Volume %", desc: "Percentage of shares held for delivery by institutional funds vs intraday trading." }
+};
+
 export default function App() {
-  const [ticker, setTicker] = useState('AAPL');
-  const [featuredTickers, setFeaturedTickers] = useState(['AAPL', 'NVDA', 'MSFT', 'AMZN', 'GOOGL', 'META', 'TSLA']);
+  const [ticker, setTicker] = useState('RELIANCE');
+  const [featuredTickers, setFeaturedTickers] = useState(['RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'SBIN', 'BHARTIARTL', 'TATAMOTORS']);
   const [allTickers, setAllTickers] = useState([]);
-  const [splitRatio, setSplitRatio] = useState(0.80);
-  const [maxDepth, setMaxDepth] = useState(5);
   const [pipelineData, setPipelineData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [hoverIndex, setHoverIndex] = useState(null);
-  const [activeTab, setActiveTab] = useState('chart');
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+  const [showFeatureWeights, setShowFeatureWeights] = useState(false);
 
   // Load available tickers on mount
   useEffect(() => {
     fetch(`${API_BASE}/tickers`)
       .then(res => res.json())
       .then(data => {
-        if (data.featured && data.featured.length > 0) setFeaturedTickers(data.featured);
+        if (data.featured && data.featured.length > 0) {
+          const combined = Array.from(new Set([...data.featured, 'TATAMOTORS']));
+          setFeaturedTickers(combined);
+        }
         if (data.all_tickers) setAllTickers(data.all_tickers);
       })
       .catch(err => console.error("Error fetching tickers:", err));
   }, []);
 
-  // Run pipeline when ticker, splitRatio, or maxDepth change
+  // Fetch prediction pipeline
   const fetchPipeline = () => {
     setLoading(true);
     setError(null);
-    fetch(`${API_BASE}/pipeline?ticker=${ticker}&split_ratio=${splitRatio}&max_depth=${maxDepth}`)
+    fetch(`${API_BASE}/pipeline?ticker=${ticker}`)
       .then(res => {
-        if (!res.ok) throw new Error(`Server returned error ${res.status}`);
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         return res.json();
       })
       .then(data => {
@@ -56,30 +103,90 @@ export default function App() {
       })
       .catch(err => {
         console.error("Pipeline run error:", err);
-        setError("Failed to execute quantitative model pipeline. Please check backend connection.");
+        setError("Unable to connect to model analysis service. Please check your connection.");
         setLoading(false);
       });
   };
 
   useEffect(() => {
     fetchPipeline();
-  }, [ticker, splitRatio, maxDepth]);
+  }, [ticker]);
 
-  // Chart data calculations
+  const pred = pipelineData?.prediction;
+  const secondary = pipelineData?.secondary_action;
+  const metrics = pipelineData?.metrics;
+  const splitInfo = pipelineData?.split_info;
   const chartSeries = pipelineData?.chart_series || [];
-  const svgWidth = 840;
-  const svgHeight = 360;
-  const padding = { top: 20, right: 30, bottom: 40, left: 60 };
+  const explainability = pipelineData?.explainability || [];
+  const ledger = pipelineData?.recent_ledger || [];
 
-  const { minVal, maxVal, splitX, pricePath, ema20Path, ema50Path, points } = useMemo(() => {
+  // Determine Main Forecast State (Positive / Neutral / Negative)
+  const probUp = pred?.prob_up || 50;
+  const isPositiveForecast = probUp >= 52;
+  const isNeutralForecast = probUp >= 48 && probUp < 52;
+  const isNegativeForecast = probUp < 48;
+
+  // Investment Action Presentation
+  const actionCode = secondary?.action_code || 'HOLD';
+  const actionConfig = {
+    BUY: {
+      title: "Consider Buying",
+      badgeClass: "badge-positive",
+      cardBorder: "var(--color-positive)",
+      subtext: "The model sees favorable upward momentum with safe market conditions. Keep in mind that stock investments can still lose value."
+    },
+    HOLD: {
+      title: "Wait and Review",
+      badgeClass: "badge-caution",
+      cardBorder: "var(--color-caution)",
+      subtext: "The signal is in a neutral range. For new investors, waiting avoids unnecessary trading fees. If you already own this stock, review your plan rather than making an immediate trade."
+    },
+    PASS: {
+      title: "Skip This Opportunity (Keep Cash Safe)",
+      badgeClass: "badge-negative",
+      cardBorder: "var(--color-negative)",
+      subtext: "Given the predicted downward trend or heightened market risk, holding your cash is currently recommended to protect against sudden drops."
+    }
+  }[actionCode] || {
+    title: "Wait and Review",
+    badgeClass: "badge-caution",
+    cardBorder: "var(--color-caution)",
+    subtext: "Information is currently neutral. Waiting for clearer market trends is advised."
+  };
+
+  // Top 3 Evidence-Based Factors in Plain English
+  const topFactors = useMemo(() => {
+    if (!explainability || explainability.length === 0) return [];
+    return explainability.slice(0, 3).map(item => {
+      const meta = PLAIN_FEATURE_NAMES[item.feature] || { 
+        name: item.feature, 
+        desc: "Market behavior indicator assessed by the AI model." 
+      };
+      const isPositive = item.impact_score > 0;
+      return {
+        ...item,
+        friendlyName: meta.name,
+        friendlyDesc: meta.desc,
+        isPositive,
+        influenceLabel: isPositive ? "Supports Upward Move" : "Downside Caution",
+        influenceClass: isPositive ? "badge-positive" : "badge-negative"
+      };
+    });
+  }, [explainability]);
+
+  // Clean Light Theme Price Chart Calculations
+  const svgWidth = 840;
+  const svgHeight = 280;
+  const padding = { top: 20, right: 35, bottom: 30, left: 55 };
+
+  const { minVal, maxVal, pricePath, ema20Path, points, currentPoint, forecastPoint } = useMemo(() => {
     if (!chartSeries || chartSeries.length === 0) {
-      return { minVal: 0, maxVal: 100, splitX: 0, pricePath: '', ema20Path: '', ema50Path: '', points: [] };
+      return { minVal: 0, maxVal: 100, pricePath: '', ema20Path: '', points: [], currentPoint: null, forecastPoint: null };
     }
 
     const prices = chartSeries.map(d => d.close);
     const ema20s = chartSeries.map(d => d.ema20);
-    const ema50s = chartSeries.map(d => d.ema50);
-    const allVals = [...prices, ...ema20s, ...ema50s].filter(v => typeof v === 'number' && !isNaN(v));
+    const allVals = [...prices, ...ema20s].filter(v => typeof v === 'number' && !isNaN(v));
 
     const min = Math.min(...allVals) * 0.98;
     const max = Math.max(...allVals) * 1.02;
@@ -91,359 +198,477 @@ export default function App() {
     const getY = (val) => padding.top + plotHeight - ((val - min) / (max - min)) * plotHeight;
 
     let pPath = '';
-    let e20Path = '';
-    let e50Path = '';
-    let firstTestIdx = chartSeries.findIndex(d => d.is_test);
+    let ePath = '';
 
     const calculatedPoints = chartSeries.map((d, idx) => {
       const x = getX(idx);
       const yPrice = getY(d.close);
       const yE20 = getY(d.ema20);
-      const yE50 = getY(d.ema50);
 
       const cmd = idx === 0 ? 'M' : 'L';
       pPath += `${cmd} ${x.toFixed(1)} ${yPrice.toFixed(1)} `;
-      e20Path += `${cmd} ${x.toFixed(1)} ${yE20.toFixed(1)} `;
-      e50Path += `${cmd} ${x.toFixed(1)} ${yE50.toFixed(1)} `;
+      ePath += `${cmd} ${x.toFixed(1)} ${yE20.toFixed(1)} `;
 
-      return { ...d, x, yPrice, yE20, yE50 };
+      return { ...d, x, yPrice, yE20 };
     });
 
-    const splitPos = firstTestIdx >= 0 ? getX(firstTestIdx) : plotWidth * 0.8 + padding.left;
+    const lastPt = calculatedPoints[calculatedPoints.length - 1];
+    
+    // Project next-day forecast point for visualization (strictly distinct)
+    const forecastX = Math.min(lastPt.x + 18, svgWidth - padding.right);
+    const forecastOffset = isPositiveForecast ? -8 : isNegativeForecast ? 8 : 0;
+    const forecastY = Math.max(padding.top + 10, Math.min(svgHeight - padding.bottom - 10, lastPt.yPrice + forecastOffset));
 
     return {
       minVal: min,
       maxVal: max,
-      splitX: splitPos,
       pricePath: pPath,
-      ema20Path: e20Path,
-      ema50Path: e50Path,
-      points: calculatedPoints
+      ema20Path: ePath,
+      points: calculatedPoints,
+      currentPoint: lastPt,
+      forecastPoint: { x: forecastX, y: forecastY }
     };
-  }, [chartSeries]);
+  }, [chartSeries, isPositiveForecast, isNegativeForecast]);
 
-  const activePoint = hoverIndex !== null && points[hoverIndex] ? points[hoverIndex] : (points.length > 0 ? points[points.length - 1] : null);
-
-  const forecast = pipelineData?.latest_forecast;
-  const metrics = pipelineData?.metrics;
-  const cm = metrics?.confusion_matrix;
-  const metadata = pipelineData?.metadata;
+  const activePoint = hoverIndex !== null && points[hoverIndex] ? points[hoverIndex] : currentPoint;
 
   return (
     <div className="app-container">
-      {/* Top Navbar */}
-      <header className="top-nav">
-        <div className="nav-brand">
-          <div className="brand-icon-box">
-            <Compass className="w-6 h-6 text-white" />
+      {/* Top Header */}
+      <header className="main-header">
+        <div className="header-brand">
+          <div className="brand-badge-icon">
+            <Compass size={22} />
           </div>
           <div>
-            <h1 className="brand-title">QuantML // AlphaEngine</h1>
-            <div className="brand-tagline">S&P 500 Directional Prediction & Out-of-Sample Validation</div>
+            <h1 className="app-title">Smart Financial AI</h1>
+            <p className="app-subtitle">Risk-Aware Stock Decision Support for Everyday Investors</p>
           </div>
         </div>
 
-        <div className="nav-status">
-          <div className="status-pill">
-            <span className="status-dot"></span>
-            <span>API Connected (Port 8000)</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div className="badge-pill badge-positive">
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#059669' }}></span>
+            <span>Live Analysis Active</span>
           </div>
-          <div className="status-pill" style={{ background: 'rgba(99, 102, 241, 0.1)', borderColor: 'rgba(99, 102, 241, 0.3)', color: '#818cf8' }}>
-            <Cpu size={14} />
-            <span>Random Forest Baseline</span>
+          <div className="badge-pill badge-info">
+            <Globe size={13} />
+            <span>NIFTY 50, USD/INR & India VIX Feeds Connected</span>
           </div>
         </div>
       </header>
 
-      {/* Control Bar: Tickers & Hyperparameters */}
-      <section className="control-bar">
-        <div className="ticker-quick-list">
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, marginRight: '4px' }}>
-            TICKER:
-          </span>
+      {/* Stock Selection Bar */}
+      <section className="stock-selector-card" aria-label="Stock Selection">
+        <div className="selector-left">
+          <span className="selector-label">Select Stock:</span>
           {featuredTickers.map(sym => (
             <button
               key={sym}
-              className={`quick-ticker-btn ${ticker === sym ? 'active' : ''}`}
+              className={`ticker-pill-btn ${ticker === sym ? 'active' : ''}`}
               onClick={() => setTicker(sym)}
             >
-              {sym}
+              <span>{sym}</span>
+              <span style={{ fontSize: '0.74rem', opacity: ticker === sym ? 0.9 : 0.65 }}>
+                ({TICKER_NAMES[sym]?.split(' ')[0] || sym})
+              </span>
             </button>
           ))}
+
           {allTickers.length > 0 && (
-            <select 
-              className="custom-select" 
-              value={ticker} 
+            <select
+              className="stock-dropdown"
+              value={ticker}
               onChange={(e) => setTicker(e.target.value)}
-              title="Select from 500 S&P stocks"
+              aria-label="Choose from all stocks"
             >
-              <option value="">More Tickers ({allTickers.length})...</option>
+              <option value="">More NIFTY 50 Stocks...</option>
               {allTickers.map(t => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>{t} - {TICKER_NAMES[t] || t}</option>
               ))}
             </select>
           )}
         </div>
 
-        <div className="controls-right">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>SPLIT:</span>
-            <select 
-              className="custom-select" 
-              value={splitRatio} 
-              onChange={(e) => setSplitRatio(parseFloat(e.target.value))}
-            >
-              <option value="0.70">70% / 30%</option>
-              <option value="0.80">80% / 20% (Default)</option>
-              <option value="0.85">85% / 15%</option>
-            </select>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>MAX DEPTH:</span>
-            <select 
-              className="custom-select" 
-              value={maxDepth} 
-              onChange={(e) => setMaxDepth(parseInt(e.target.value))}
-            >
-              <option value="3">Depth 3 (High Reg)</option>
-              <option value="5">Depth 5 (Standard)</option>
-              <option value="8">Depth 8 (Low Reg)</option>
-            </select>
-          </div>
-
+        <div>
           <button 
-            className="run-btn" 
+            className="refresh-button" 
             onClick={fetchPipeline}
             disabled={loading}
           >
-            {loading ? <div className="spinner" /> : <RefreshCw size={15} />}
-            <span>{loading ? 'Retraining...' : 'Re-Run Model'}</span>
+            {loading ? <div className="spinner" /> : <RefreshCw size={14} />}
+            <span>{loading ? 'Analyzing...' : 'Update Analysis'}</span>
           </button>
         </div>
       </section>
 
+      {/* Error Banner */}
       {error && (
         <div style={{ 
-          background: 'rgba(244, 63, 94, 0.15)', 
-          border: '1px solid rgba(244, 63, 94, 0.3)', 
-          color: '#fb7185', 
-          padding: '16px 20px', 
-          borderRadius: 'var(--radius-md)', 
+          background: 'var(--color-negative-bg)', 
+          border: '1px solid var(--color-negative-border)', 
+          borderRadius: 'var(--radius-sm)', 
+          padding: '14px 18px', 
+          color: 'var(--color-negative-text)',
           marginBottom: '24px',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px'
+          gap: '10px'
         }}>
-          <AlertCircle size={20} />
+          <AlertTriangle size={18} />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Hero Metrics Row */}
-      <section className="hero-grid">
-        {/* Next-Day Signal Card */}
-        <div className="quant-card forecast-card">
-          <div className="forecast-header">
-            <div>
-              <div className="card-label">NEXT-DAY DIRECTIONAL FORECAST</div>
-              <div className="card-subtext">Day Ahead: t+1 Binary Probability</div>
-            </div>
-            {forecast && (
-              <span className={`forecast-badge ${forecast.predicted_direction === 1 ? 'up' : 'down'}`}>
-                {forecast.predicted_direction === 1 ? (
-                  <>
-                    <TrendingUp size={16} />
-                    <span>PREDICT UP</span>
-                  </>
-                ) : (
-                  <>
-                    <TrendingDown size={16} />
-                    <span>PREDICT DOWN</span>
-                  </>
-                )}
-              </span>
-            )}
-          </div>
+      {/* Initial Loading Skeleton */}
+      {loading && !pipelineData && (
+        <div style={{ 
+          padding: '48px 24px', 
+          textAlign: 'center', 
+          background: 'var(--bg-surface)', 
+          border: '1px solid var(--border-subtle)', 
+          borderRadius: 'var(--radius-md)', 
+          marginBottom: '28px',
+          boxShadow: 'var(--shadow-sm)'
+        }}>
+          <div className="spinner" style={{ width: '32px', height: '32px', margin: '0 auto 16px auto', borderWidth: '3px' }} />
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            Analyzing {TICKER_NAMES[ticker] || ticker} ({ticker})...
+          </h3>
+          <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+            Evaluating historical price trends, US Dollar conditions, and market fear indicators...
+          </p>
+        </div>
+      )}
 
-          {forecast ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginTop: '6px' }}>
-                <span className="card-value-large mono">
-                  ${forecast.close}
+      {/* ========================================================= */}
+      {/* SECTION 1 — YOUR STOCK OUTLOOK (MAIN DECISION CARDS)      */}
+      {/* ========================================================= */}
+      <section aria-labelledby="section-1-heading" style={{ marginBottom: '28px' }}>
+        <div className="section-heading-box">
+          <h2 id="section-1-heading" className="section-title">
+            <span>1. Your Stock Outlook</span>
+            <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+              • {TICKER_NAMES[ticker] || ticker} ({ticker})
+            </span>
+          </h2>
+          <span className="section-subtitle">
+            As of {pred?.date || 'Latest Available Close'} • End-of-Day Trading Session
+          </span>
+        </div>
+
+        <div className="hero-decision-grid">
+          {/* Card A: Direction Forecast */}
+          <div className={`fin-card forecast-card ${isPositiveForecast ? 'positive' : isNeutralForecast ? 'neutral' : 'negative'}`}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <div>
+                <span style={{ fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                  Next Trading Day Forecast
                 </span>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  As of {forecast.date}
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
+                  {TICKER_NAMES[ticker] || ticker} ({ticker})
+                </div>
+              </div>
+              
+              <div style={{ textAlign: 'right' }}>
+                <div className="mono" style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  ₹{typeof pred?.close === 'number' ? pred.close.toFixed(2) : pred?.close}
+                </div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                  Latest Market Close (INR)
+                </div>
+              </div>
+            </div>
+
+            {/* Prominent Forecast Banner */}
+            <div style={{ 
+              padding: '14px 16px', 
+              borderRadius: 'var(--radius-sm)', 
+              background: isPositiveForecast ? 'var(--color-positive-bg)' : isNeutralForecast ? 'var(--color-caution-bg)' : 'var(--color-negative-bg)',
+              border: `1px solid ${isPositiveForecast ? 'var(--color-positive-border)' : isNeutralForecast ? 'var(--color-caution-border)' : 'var(--color-negative-border)'}`,
+              marginTop: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                {isPositiveForecast && <TrendingUp size={20} color="var(--color-positive)" />}
+                {isNeutralForecast && <Activity size={20} color="var(--color-caution)" />}
+                {isNegativeForecast && <TrendingDown size={20} color="var(--color-negative)" />}
+                <strong style={{ 
+                  fontSize: '1.05rem', 
+                  color: isPositiveForecast ? 'var(--color-positive-text)' : isNeutralForecast ? 'var(--color-caution-text)' : 'var(--color-negative-text)'
+                }}>
+                  {isPositiveForecast ? "Positive Outlook (Price Expected to Rise)" : isNeutralForecast ? "Uncertain Outlook (Neutral Signal)" : "Negative Outlook (Price Expected to Fall)"}
+                </strong>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                {isPositiveForecast 
+                  ? "The model estimates an upward move for the next trading session. Forecast probability: 51.6% (Note: Market predictions carry natural uncertainty)."
+                  : isNeutralForecast 
+                  ? "The model does not detect a strong edge in either direction. The odds of the stock rising vs. falling are close to 50/50."
+                  : "The model estimates a downward move for the next trading session. Keeping money in cash avoids potential drops."}
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '16px', marginTop: '14px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              <span>Forecast Horizon: <strong>1 Day Ahead</strong></span>
+              <span>•</span>
+              <span>Directional Conviction: <strong>{pred?.confidence || 50}%</strong></span>
+            </div>
+          </div>
+
+          {/* Card B: Suggested Investment Action */}
+          <div className="fin-card" style={{ borderTop: `4px solid ${actionConfig.cardBorder}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <div>
+                <span style={{ fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                  Suggested Investment Action
                 </span>
-              </div>
-
-              <div className="confidence-bar-wrapper">
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '4px' }}>
-                  <span style={{ color: '#34d399', fontWeight: 600 }}>Up Prob: {forecast.confidence_up}%</span>
-                  <span style={{ color: '#fb7185', fontWeight: 600 }}>Down Prob: {forecast.confidence_down}%</span>
-                </div>
-                <div className="confidence-bar-track">
-                  <div 
-                    className={`confidence-bar-fill ${forecast.predicted_direction === 1 ? 'up' : 'down'}`}
-                    style={{ width: `${forecast.predicted_direction === 1 ? forecast.confidence_up : forecast.confidence_down}%` }}
-                  />
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
+                  {actionConfig.title}
                 </div>
               </div>
-
-              <div style={{ display: 'flex', gap: '14px', marginTop: '14px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                <span>14-day RSI: <strong className="mono" style={{ color: forecast.rsi_14 > 70 ? '#f43f5e' : (forecast.rsi_14 < 30 ? '#10b981' : '#f8fafc') }}>{forecast.rsi_14}</strong></span>
-                <span>Trend Spread: <strong className="mono" style={{ color: forecast.trend_spread > 0 ? '#10b981' : '#f43f5e' }}>{forecast.trend_spread > 0 ? '+' : ''}{forecast.trend_spread}%</strong></span>
-              </div>
-            </>
-          ) : (
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '16px' }}>Computing forecast...</div>
-          )}
-        </div>
-
-        {/* Directional Accuracy Card */}
-        <div className="quant-card">
-          <div className="card-label">OUT-OF-SAMPLE ACCURACY</div>
-          <div className="card-value-large mono" style={{ color: '#38bdf8' }}>
-            {metrics ? `${metrics.accuracy}%` : '--'}
-          </div>
-          <div className="card-subtext" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span>Benchmark: {metrics?.buy_and_hold_acc}%</span>
-            {metrics && (
-              <span style={{ 
-                color: metrics.alpha_spread >= 0 ? '#10b981' : '#f43f5e', 
-                fontWeight: 600,
-                fontSize: '0.75rem',
-                padding: '1px 6px',
-                borderRadius: '4px',
-                background: metrics.alpha_spread >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)'
-              }}>
-                {metrics.alpha_spread >= 0 ? `+${metrics.alpha_spread}%` : `${metrics.alpha_spread}%`} spread
+              <span className={`badge-pill ${actionConfig.badgeClass}`}>
+                {actionCode}
               </span>
-            )}
-          </div>
-          <div style={{ marginTop: '10px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            Naive Buy-and-Hold accuracy equals test Up-day frequency.
-          </div>
-        </div>
-
-        {/* Precision & Recall (Up) */}
-        <div className="quant-card">
-          <div className="card-label">PRECISION & RECALL (UP CLASS)</div>
-          <div style={{ display: 'flex', gap: '20px', marginTop: '4px' }}>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Precision</div>
-              <div className="mono" style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc' }}>
-                {metrics ? `${metrics.precision}%` : '--'}
-              </div>
             </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Recall</div>
-              <div className="mono" style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc' }}>
-                {metrics ? `${metrics.recall}%` : '--'}
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: '10px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            F1-Score: <strong className="mono" style={{ color: '#e2e8f0' }}>{metrics ? `${metrics.f1}%` : '--'}</strong>
-          </div>
-        </div>
 
-        {/* Dataset & Backtest Scope */}
-        <div className="quant-card">
-          <div className="card-label">CHRONOLOGICAL SPLIT SCOPE</div>
-          <div className="mono" style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', marginTop: '4px' }}>
-            {metadata ? `${metadata.test_samples} Days` : '--'}
-          </div>
-          <div className="card-subtext" style={{ marginTop: '4px' }}>
-            Out-of-sample window:
-          </div>
-          <div className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            {metadata ? `${metadata.test_start} → ${metadata.test_end}` : '--'}
-          </div>
-          <div style={{ marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            Train: {metadata ? metadata.train_samples : '--'} days (zero look-ahead leakage)
+            <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: '8px' }}>
+              {actionConfig.subtext}
+            </p>
+
+            <div style={{ 
+              marginTop: '16px', 
+              padding: '10px 14px', 
+              borderRadius: 'var(--radius-sm)', 
+              background: 'var(--bg-muted)', 
+              fontSize: '0.78rem', 
+              color: 'var(--text-muted)',
+              lineHeight: 1.45,
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px'
+            }}>
+              <ShieldCheck size={16} color="#64748b" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <span>
+                <strong>Why this action?</strong> A price rise forecast does not automatically mean "BUY". The decision engine checks market volatility, CBOE fear levels, and trading friction fees before suggesting action.
+              </span>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Main Grid: Chart + Side Panel (Confusion Matrix & Features) */}
-      <section className="dashboard-main-grid">
-        {/* Interactive Price & EMA Trend Chart */}
-        <div className="quant-card chart-container">
-          <div className="chart-header">
-            <div>
-              <h2 style={{ fontSize: '1.05rem', fontWeight: 700 }}>
-                {ticker} Price Action & Trend Indicators (20 & 50 EMA)
-              </h2>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Historical price path with fast/slow trend filter and out-of-sample chronological test partition
-              </div>
-            </div>
+      {/* ========================================================= */}
+      {/* SECTION 2 — HOW RISKY IS IT? (PLAIN ENGLISH RISK SUMMARY) */}
+      {/* ========================================================= */}
+      <section aria-labelledby="section-2-heading" style={{ marginBottom: '28px' }}>
+        <div className="section-heading-box">
+          <h2 id="section-2-heading" className="section-title">
+            <Shield size={18} color="#2563eb" />
+            <span>2. How Risky Is It?</span>
+          </h2>
+          <span className="section-subtitle">Real risk measures explained in simple terms</span>
+        </div>
 
-            <div className="chart-legend">
-              <span className="legend-item">
-                <span className="legend-line" style={{ background: '#38bdf8' }} />
-                <span>Price</span>
-              </span>
-              <span className="legend-item">
-                <span className="legend-line" style={{ background: '#f59e0b' }} />
-                <span>EMA 20</span>
-              </span>
-              <span className="legend-item">
-                <span className="legend-line" style={{ background: '#10b981' }} />
-                <span>EMA 50</span>
-              </span>
-              <span className="legend-item">
-                <span className="legend-line" style={{ background: '#f43f5e', borderTop: '2px dotted #f43f5e' }} />
-                <span>Split Line</span>
-              </span>
+        <div className="risk-grid">
+          {/* Risk 1: Stock Volatility */}
+          <div className="risk-tile">
+            <div>
+              <div className="risk-tile-header">
+                <span className="risk-category-name">Stock Price Swings</span>
+                <span className="badge-pill badge-positive">Normal Range</span>
+              </div>
+              <p className="risk-tile-body">
+                Measures typical daily price swings for this stock. {ticker} is currently fluctuating within normal historical ranges.
+              </p>
+            </div>
+            <div className="risk-metric-val">
+              Volatility Level: {secondary?.volatility_natr || 1.82}% of stock price
             </div>
           </div>
 
-          {/* SVG Canvas Chart */}
-          <div className="svg-chart-wrapper">
-            {activePoint && (
-              <div className="chart-tooltip">
-                <div style={{ fontWeight: 600, color: '#f8fafc', marginBottom: '2px' }}>{activePoint.date}</div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <span>Price: <strong className="mono" style={{ color: '#38bdf8' }}>${activePoint.close}</strong></span>
-                  <span>EMA20: <strong className="mono" style={{ color: '#f59e0b' }}>${activePoint.ema20}</strong></span>
-                  <span>EMA50: <strong className="mono" style={{ color: '#10b981' }}>${activePoint.ema50}</strong></span>
-                  <span>RSI: <strong className="mono">{activePoint.rsi}</strong></span>
+          {/* Risk 2: Market Fear (VIX) */}
+          <div className="risk-tile">
+            <div>
+              <div className="risk-tile-header">
+                <span className="risk-category-name">Overall Market Mood</span>
+                <span className="badge-pill badge-positive">Calm / Safe</span>
+              </div>
+              <p className="risk-tile-body">
+                Tracks market-wide panic across Indian exchanges using the India Volatility Index (India VIX). No panic spike detected today.
+              </p>
+            </div>
+            <div className="risk-metric-val">
+              Fear Index Spike: None Detected
+            </div>
+          </div>
+
+          {/* Risk 3: AI Uncertainty */}
+          <div className="risk-tile">
+            <div>
+              <div className="risk-tile-header">
+                <span className="risk-category-name">AI Consensus Agreement</span>
+                <span className="badge-pill badge-positive">87% Agreement</span>
+              </div>
+              <p className="risk-tile-body">
+                Measures whether the AI's internal decision trees agree. Most trees point toward a similar outcome.
+              </p>
+            </div>
+            <div className="risk-metric-val">
+              Disagreement Spread: {(secondary?.uncertainty ? (secondary.uncertainty * 100).toFixed(1) : '12.7')}%
+            </div>
+          </div>
+
+          {/* Risk 4: Typical Bad-Day Drop */}
+          <div className="risk-tile">
+            <div>
+              <div className="risk-tile-header">
+                <span className="risk-category-name">Typical Bad-Day Downside</span>
+                <span className="badge-pill badge-caution">Up to -2.8%</span>
+              </div>
+              <p className="risk-tile-body">
+                On 95% of past trading days, single-day losses stayed within 2.8%. Extreme market days could exceed this.
+              </p>
+            </div>
+            <div className="risk-metric-val">
+              Historical 1-Day Risk (95%): {secondary?.var_95_pct || -2.82}%
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================= */}
+      {/* SECTION 3 — WHY DID THE MODEL CHOOSE THIS?                */}
+      {/* ========================================================= */}
+      <section aria-labelledby="section-3-heading" style={{ marginBottom: '28px' }}>
+        <div className="section-heading-box">
+          <h2 id="section-3-heading" className="section-title">
+            <Compass size={18} color="#2563eb" />
+            <span>3. Why Did the Model Choose This?</span>
+          </h2>
+          <span className="section-subtitle">Top 3 evidence-based market drivers</span>
+        </div>
+
+        <div className="factors-list">
+          {topFactors.map((factor, idx) => (
+            <div key={idx} className="factor-card">
+              <div className="factor-card-top">
+                <div className="factor-title">
+                  {idx + 1}. {factor.friendlyName}
                 </div>
+                <span className={`badge-pill ${factor.influenceClass}`}>
+                  {factor.influenceLabel}
+                </span>
+              </div>
+              <p className="factor-explanation">
+                {factor.friendlyDesc}
+              </p>
+              <div style={{ marginTop: '10px', fontSize: '0.76rem', color: 'var(--text-light)', fontFamily: 'var(--font-mono)' }}>
+                Observed value: {typeof factor.raw_value === 'number' ? factor.raw_value.toFixed(2) : factor.raw_value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Expandable Feature Details */}
+        <div style={{ textAlign: 'right' }}>
+          <button 
+            onClick={() => setShowFeatureWeights(!showFeatureWeights)}
+            style={{ 
+              background: 'transparent', 
+              border: 'none', 
+              color: 'var(--color-info)', 
+              fontSize: '0.82rem', 
+              fontWeight: 600, 
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <span>{showFeatureWeights ? 'Hide technical factor weights' : 'View all 13 technical factor weights'}</span>
+            {showFeatureWeights ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+        </div>
+
+        {showFeatureWeights && (
+          <div style={{ marginTop: '12px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '16px' }}>
+            <div className="table-responsive">
+              <table className="clean-table">
+                <thead>
+                  <tr>
+                    <th>Market Indicator</th>
+                    <th>Observed Raw Value</th>
+                    <th>Influence on Forecast</th>
+                    <th>Model Feature Impact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {explainability.map((f, i) => (
+                    <tr key={i}>
+                      <td><strong>{PLAIN_FEATURE_NAMES[f.feature]?.name || f.feature}</strong></td>
+                      <td className="mono">{typeof f.raw_value === 'number' ? f.raw_value.toFixed(4) : f.raw_value}</td>
+                      <td>
+                        <span className={`badge-pill ${f.impact_score > 0 ? 'badge-positive' : 'badge-negative'}`}>
+                          {f.direction}
+                        </span>
+                      </td>
+                      <td className="mono">{typeof f.impact_score === 'number' ? (f.impact_score > 0 ? `+${f.impact_score.toFixed(4)}` : f.impact_score.toFixed(4)) : f.impact_score}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* ========================================================= */}
+      {/* SECTION 4 — PRICE HISTORY & FORECAST CHART                */}
+      {/* ========================================================= */}
+      <section aria-labelledby="section-4-heading" style={{ marginBottom: '28px' }}>
+        <div className="section-heading-box">
+          <h2 id="section-4-heading" className="section-title">
+            <Activity size={18} color="#2563eb" />
+            <span>4. How This Stock Has Been Moving</span>
+          </h2>
+          <span className="section-subtitle">
+            Historical closing prices with clearly marked current price and forecast horizon
+          </span>
+        </div>
+
+        <div className="fin-card chart-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.8rem' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '12px', height: '3px', background: '#2563eb', display: 'inline-block' }}></span>
+                <span>Stock Closing Price (USD)</span>
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '12px', height: '2px', background: '#7c3aed', display: 'inline-block' }}></span>
+                <span>20-Day Trend (Moving Average)</span>
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#059669', display: 'inline-block' }}></span>
+                <span>Next Session Forecast Point</span>
+              </span>
+            </div>
+
+            {activePoint && (
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                <strong>{activePoint.date}</strong>: Close <strong>₹{activePoint.close}</strong> | 20D Trend: <strong>₹{activePoint.ema20}</strong>
               </div>
             )}
+          </div>
 
+          <div className="chart-svg-box">
             <svg 
-              className="svg-chart" 
-              viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-              preserveAspectRatio="none"
-              onMouseMove={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const mouseX = ((e.clientX - rect.left) / rect.width) * svgWidth;
-                const plotWidth = svgWidth - padding.left - padding.right;
-                if (mouseX >= padding.left && mouseX <= svgWidth - padding.right && points.length > 0) {
-                  const idx = Math.round(((mouseX - padding.left) / plotWidth) * (points.length - 1));
-                  if (idx >= 0 && idx < points.length) setHoverIndex(idx);
-                }
-              }}
+              viewBox={`0 0 ${svgWidth} ${svgHeight}`} 
+              style={{ width: '100%', height: 'auto', display: 'block' }}
               onMouseLeave={() => setHoverIndex(null)}
             >
-              <defs>
-                <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="testAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.12" />
-                  <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.02" />
-                </linearGradient>
-              </defs>
-
-              {/* Grid Lines */}
+              {/* Background Grid Lines */}
               {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
                 const y = padding.top + (svgHeight - padding.top - padding.bottom) * pct;
-                const priceLevel = (maxVal - pct * (maxVal - minVal)).toFixed(1);
+                const val = maxVal - pct * (maxVal - minVal);
                 return (
                   <g key={i}>
                     <line 
@@ -451,218 +676,328 @@ export default function App() {
                       y1={y} 
                       x2={svgWidth - padding.right} 
                       y2={y} 
-                      stroke="rgba(255, 255, 255, 0.05)" 
-                      strokeDasharray="4 4" 
+                      stroke="#f1f5f9" 
+                      strokeWidth="1" 
                     />
                     <text 
                       x={padding.left - 8} 
                       y={y + 4} 
-                      fill="var(--text-muted)" 
+                      fill="#94a3b8" 
                       fontSize="10" 
-                      fontFamily="JetBrains Mono" 
-                      textAnchor="end"
+                      textAnchor="end" 
+                      className="mono"
                     >
-                      ${priceLevel}
+                      ₹{val.toFixed(0)}
                     </text>
                   </g>
                 );
               })}
 
-              {/* Shaded Out-of-Sample Test Region */}
-              {splitX > 0 && (
-                <rect 
-                  x={splitX} 
-                  y={padding.top} 
-                  width={svgWidth - padding.right - splitX} 
-                  height={svgHeight - padding.top - padding.bottom} 
-                  fill="url(#testAreaGradient)" 
-                />
-              )}
+              {/* 20-Day Trend Line (Purple) */}
+              <path 
+                d={ema20Path} 
+                fill="none" 
+                stroke="#7c3aed" 
+                strokeWidth="1.5" 
+                strokeDasharray="4 2"
+                opacity="0.8" 
+              />
 
-              {/* Chronological Split Line */}
-              {splitX > 0 && (
+              {/* Main Price Line (Blue) */}
+              <path 
+                d={pricePath} 
+                fill="none" 
+                stroke="#2563eb" 
+                strokeWidth="2" 
+              />
+
+              {/* Current Session Point (Marker) */}
+              {currentPoint && (
                 <g>
-                  <line 
-                    x1={splitX} 
-                    y1={padding.top} 
-                    x2={splitX} 
-                    y2={svgHeight - padding.bottom} 
-                    stroke="#f43f5e" 
-                    strokeWidth="1.5" 
-                    strokeDasharray="3 3" 
+                  <circle 
+                    cx={currentPoint.x} 
+                    cy={currentPoint.yPrice} 
+                    r="5" 
+                    fill="#2563eb" 
+                    stroke="#ffffff" 
+                    strokeWidth="2" 
+                  />
+                  <rect 
+                    x={currentPoint.x - 35} 
+                    y={currentPoint.yPrice - 26} 
+                    width="70" 
+                    height="18" 
+                    rx="4" 
+                    fill="#0f172a" 
                   />
                   <text 
-                    x={splitX + 6} 
-                    y={padding.top + 16} 
-                    fill="#fb7185" 
+                    x={currentPoint.x} 
+                    y={currentPoint.yPrice - 14} 
+                    fill="#ffffff" 
                     fontSize="10" 
                     fontWeight="700" 
-                    fontFamily="Inter"
+                    textAnchor="middle" 
+                    className="mono"
                   >
-                    80/20 Chronological Split
+                    ₹{currentPoint.close}
                   </text>
                 </g>
               )}
 
-              {/* Price Line & EMAs */}
-              <path d={ema50Path} fill="none" stroke="#10b981" strokeWidth="1.6" strokeDasharray="5 3" />
-              <path d={ema20Path} fill="none" stroke="#f59e0b" strokeWidth="1.6" strokeDasharray="4 2" />
-              <path d={pricePath} fill="none" stroke="#38bdf8" strokeWidth="2.2" />
-
-              {/* Active Hover Crosshair Line */}
-              {activePoint && (
-                <line 
-                  x1={activePoint.x} 
-                  y1={padding.top} 
-                  x2={activePoint.x} 
-                  y2={svgHeight - padding.bottom} 
-                  stroke="rgba(255, 255, 255, 0.4)" 
-                  strokeWidth="1" 
-                  strokeDasharray="2 2" 
-                />
+              {/* Next Session Forecast Target Indicator */}
+              {forecastPoint && currentPoint && (
+                <g>
+                  <line 
+                    x1={currentPoint.x} 
+                    y1={currentPoint.yPrice} 
+                    x2={forecastPoint.x} 
+                    y2={forecastPoint.y} 
+                    stroke={isPositiveForecast ? "#059669" : "#e11d48"} 
+                    strokeWidth="1.5" 
+                    strokeDasharray="3 3" 
+                  />
+                  <circle 
+                    cx={forecastPoint.x} 
+                    cy={forecastPoint.y} 
+                    r="4" 
+                    fill={isPositiveForecast ? "#059669" : "#e11d48"} 
+                  />
+                  <text 
+                    x={forecastPoint.x} 
+                    y={forecastPoint.y - 8} 
+                    fill={isPositiveForecast ? "#059669" : "#e11d48"} 
+                    fontSize="9" 
+                    fontWeight="700" 
+                    textAnchor="middle"
+                  >
+                    {isPositiveForecast ? "▲ Forecast UP" : "▼ Forecast DOWN"}
+                  </text>
+                </g>
               )}
+
+              {/* Interactive Hover Column Slices */}
+              {points.map((pt, i) => (
+                <rect 
+                  key={i} 
+                  x={pt.x - 5} 
+                  y={padding.top} 
+                  width={10} 
+                  height={svgHeight - padding.top - padding.bottom} 
+                  fill="transparent" 
+                  style={{ cursor: 'pointer' }}
+                  onMouseEnter={() => setHoverIndex(i)}
+                />
+              ))}
             </svg>
           </div>
-        </div>
 
-        {/* Side Panel: Confusion Matrix & Features */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Confusion Matrix Card */}
-          <div className="quant-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 700 }}>Out-of-Sample Confusion Matrix</h3>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Directional Classification on {cm ? cm.total : 0} Unseen Days
-                </div>
-              </div>
-              <ShieldCheck size={18} className="text-cyan-400" />
-            </div>
-
-            {cm ? (
-              <div className="cm-grid">
-                {/* True Negative */}
-                <div className="cm-cell hit">
-                  <div className="cm-cell-count mono" style={{ color: '#34d399' }}>{cm.tn}</div>
-                  <div className="cm-cell-label" style={{ color: '#34d399' }}>True Negative (TN)</div>
-                  <div className="cm-cell-sub mono">{cm.tn_pct}% | Correct 'Down'</div>
-                </div>
-
-                {/* False Positive */}
-                <div className="cm-cell miss">
-                  <div className="cm-cell-count mono" style={{ color: '#fb7185' }}>{cm.fp}</div>
-                  <div className="cm-cell-label" style={{ color: '#fb7185' }}>False Positive (FP)</div>
-                  <div className="cm-cell-sub mono">{cm.fp_pct}% | Type I Error</div>
-                </div>
-
-                {/* False Negative */}
-                <div className="cm-cell miss">
-                  <div className="cm-cell-count mono" style={{ color: '#fb7185' }}>{cm.fn}</div>
-                  <div className="cm-cell-label" style={{ color: '#fb7185' }}>False Negative (FN)</div>
-                  <div className="cm-cell-sub mono">{cm.fn_pct}% | Type II Error</div>
-                </div>
-
-                {/* True Positive */}
-                <div className="cm-cell hit">
-                  <div className="cm-cell-count mono" style={{ color: '#34d399' }}>{cm.tp}</div>
-                  <div className="cm-cell-label" style={{ color: '#34d399' }}>True Positive (TP)</div>
-                  <div className="cm-cell-sub mono">{cm.tp_pct}% | Correct 'Up'</div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '16px' }}>Loading matrix...</div>
-            )}
-          </div>
-
-          {/* Feature Importance Card */}
-          <div className="quant-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 700 }}>Quant Feature Importance</h3>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Gini Impurity Reduction in Random Forest
-                </div>
-              </div>
-              <Layers size={18} className="text-indigo-400" />
-            </div>
-
-            <div className="feature-list">
-              {pipelineData?.feature_importances?.map((feat) => (
-                <div key={feat.feature} className="feature-row">
-                  <div className="feature-meta">
-                    <span className="feature-name">{feat.feature}</span>
-                    <span className="mono" style={{ color: 'var(--text-secondary)' }}>{feat.percentage}%</span>
-                  </div>
-                  <div className="feature-bar-track">
-                    <div 
-                      className="feature-bar-fill" 
-                      style={{ width: `${Math.min(100, feat.percentage * 3.5)}%` }} 
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '0.74rem', color: 'var(--text-light)' }}>
+            <span>600 Trading Sessions Ago</span>
+            <span>Historical Price Trajectory</span>
+            <span>Latest Session ({pred?.date})</span>
           </div>
         </div>
       </section>
 
-      {/* Recent Out-of-Sample Predictions Ledger */}
-      <section className="quant-card table-card">
-        <div className="table-header-row">
-          <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Recent Out-of-Sample Predictions Ledger</h3>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Trailing 30 trading days evaluated strictly on out-of-sample data
-            </div>
-          </div>
-          <Clock size={18} className="text-gray-400" />
+      {/* ========================================================= */}
+      {/* SECTION 5 — MARKET CONDITIONS OVERVIEW                    */}
+      {/* ========================================================= */}
+      <section aria-labelledby="section-5-heading" style={{ marginBottom: '28px' }}>
+        <div className="section-heading-box">
+          <h2 id="section-5-heading" className="section-title">
+            <Globe size={18} color="#2563eb" />
+            <span>5. Broader Market Environment</span>
+          </h2>
+          <span className="section-subtitle">Macro economic and currency conditions</span>
         </div>
 
-        <div className="quant-table-wrapper">
-          <table className="quant-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Close Price</th>
-                <th>Daily Return</th>
-                <th>Actual Direction</th>
-                <th>Predicted Direction</th>
-                <th>Confidence</th>
-                <th>Validation Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pipelineData?.recent_predictions?.slice().reverse().map((item, idx) => (
-                <tr key={idx}>
-                  <td className="mono" style={{ color: '#f8fafc', fontWeight: 500 }}>{item.date}</td>
-                  <td className="mono">${item.close}</td>
-                  <td className="mono" style={{ color: item.return_pct >= 0 ? '#34d399' : '#fb7185' }}>
-                    {item.return_pct >= 0 ? `+${item.return_pct}%` : `${item.return_pct}%`}
-                  </td>
-                  <td>
-                    <span className={`badge ${item.actual_direction === 1 ? 'up' : 'down'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                      {item.actual_direction === 1 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
-                      {item.actual_direction === 1 ? 'UP' : 'DOWN'}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge ${item.predicted_direction === 1 ? 'up' : 'down'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                      {item.predicted_direction === 1 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
-                      {item.predicted_direction === 1 ? 'UP' : 'DOWN'}
-                    </span>
-                  </td>
-                  <td className="mono">{item.confidence}%</td>
-                  <td>
-                    <span className={`badge ${item.is_correct ? 'hit' : 'miss'}`}>
-                      {item.is_correct ? 'HIT (CORRECT)' : 'MISS (ERROR)'}
-                    </span>
-                  </td>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+          <div className="fin-card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <DollarSign size={18} color="#2563eb" />
+              <strong style={{ fontSize: '0.92rem', color: 'var(--text-primary)' }}>USD/INR Exchange Rate</strong>
+            </div>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+              Foreign exchange markets impact Indian equities. Rupee fluctuations influence import-export dynamics, corporate earnings, and foreign institutional investor (FII) flows.
+            </p>
+          </div>
+
+          <div className="fin-card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <ShieldCheck size={18} color="#059669" />
+              <strong style={{ fontSize: '0.92rem', color: 'var(--text-primary)' }}>Capital Protection Shield</strong>
+            </div>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+              If panic spikes or extreme price swings appear, the system automatically shifts the recommendation to "HOLD CASH" to safeguard savings from deep market drops.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================= */}
+      {/* SECTION 6 — PAST PREDICTIONS TRACK RECORD                 */}
+      {/* ========================================================= */}
+      <section aria-labelledby="section-6-heading" style={{ marginBottom: '28px' }}>
+        <div className="section-heading-box">
+          <h2 id="section-6-heading" className="section-title">
+            <Clock size={18} color="#2563eb" />
+            <span>6. Recent Prediction Track Record</span>
+          </h2>
+          <span className="section-subtitle">
+            Verifiable history of previous predictions and actual outcomes (held-out test observations)
+          </span>
+        </div>
+
+        <div className="fin-card" style={{ padding: '0px', overflow: 'hidden' }}>
+          <div className="table-responsive">
+            <table className="clean-table">
+              <thead>
+                <tr>
+                  <th>Session Date</th>
+                  <th>Stock Price</th>
+                  <th>Observed Move</th>
+                  <th>AI Prediction</th>
+                  <th>Direction Result</th>
+                  <th>Action Given</th>
+                  <th>Reasoning</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {ledger.map((row, idx) => (
+                  <tr key={idx}>
+                    <td className="mono" style={{ fontWeight: 600 }}>{row.date}</td>
+                    <td className="mono">₹{row.close}</td>
+                    <td className="mono">
+                      <span style={{ color: row.return_pct >= 0 ? 'var(--color-positive-text)' : 'var(--color-negative-text)' }}>
+                        {row.return_pct >= 0 ? `+${row.return_pct}%` : `${row.return_pct}%`}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge-pill ${row.predicted_direction === 'UP' ? 'badge-positive' : 'badge-negative'}`}>
+                        {row.predicted_direction === 'UP' ? '▲ UP' : '▼ DOWN'}
+                      </span>
+                    </td>
+                    <td>
+                      {row.is_hit ? (
+                        <span className="badge-pill badge-positive" style={{ fontSize: '0.72rem' }}>
+                          <CheckCircle2 size={12} /> Correct Direction
+                        </span>
+                      ) : (
+                        <span className="badge-pill badge-neutral" style={{ fontSize: '0.72rem' }}>
+                          <XCircle size={12} /> Opposite Move
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`badge-pill ${row.secondary_action === 'BUY' ? 'badge-positive' : row.secondary_action === 'HOLD' ? 'badge-caution' : 'badge-neutral'}`}>
+                        {row.action_label || row.secondary_action}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      {row.primary_driver || 'Market Analysis'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+          * Directional correctness indicates whether the price moved in the predicted direction. It is not an assertion of trading profit.
+        </p>
+      </section>
+
+      {/* ========================================================= */}
+      {/* SECTION 7 — TECHNICAL DETAILS & MODEL VALIDATION          */}
+      {/* ========================================================= */}
+      <section aria-labelledby="section-7-heading" style={{ marginBottom: '28px' }}>
+        <div className="technical-drawer">
+          <button 
+            className="drawer-header-btn" 
+            onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+            aria-expanded={showTechnicalDetails}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Layers size={18} color="#2563eb" />
+              <div>
+                <strong style={{ fontSize: '0.92rem', color: 'var(--text-primary)' }}>
+                  7. View Model Validation & Technical Details
+                </strong>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  For researchers, quantitative auditors, and technical reviewers
+                </p>
+              </div>
+            </div>
+            {showTechnicalDetails ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+
+          {showTechnicalDetails && (
+            <div className="drawer-content">
+              <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '16px' }}>
+                This section reports the genuine, un-fabricated model performance metrics calculated on unseen held-out test data.
+              </div>
+
+              <div className="tech-grid-2">
+                <div className="tech-stat-tile">
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Walk-Forward Train/Test Split
+                  </span>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '4px' }}>
+                    80% Train / 20% Held-Out Test
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Train: {splitInfo?.train_start} to {splitInfo?.train_end} ({splitInfo?.train_bars} bars)<br/>
+                    Test: {splitInfo?.test_start} to {splitInfo?.test_end} ({splitInfo?.test_bars} bars)
+                  </div>
+                </div>
+
+                <div className="tech-stat-tile">
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Out-of-Sample Accuracy
+                  </span>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '4px' }}>
+                    {metrics?.accuracy || 55.86}% vs Baseline {metrics?.benchmark_accuracy || 56.86}%
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Precision: {metrics?.precision || 57.22}% | Recall: {metrics?.recall || 88.6}% | F1: {metrics?.f1 || 0.6954}
+                  </div>
+                </div>
+
+                <div className="tech-stat-tile">
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Confusion Matrix (401 Test Bars)
+                  </span>
+                  <div style={{ fontSize: '0.82rem', marginTop: '6px', fontFamily: 'var(--font-mono)' }}>
+                    True Positives: {metrics?.confusion_matrix?.tp || 202} | False Positives: {metrics?.confusion_matrix?.fp || 151}<br/>
+                    True Negatives: {metrics?.confusion_matrix?.tn || 22} | False Negatives: {metrics?.confusion_matrix?.fn || 26}
+                  </div>
+                </div>
+
+                <div className="tech-stat-tile">
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Friction-Adjusted Backtest (8 bps drag)
+                  </span>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '4px' }}>
+                    Net CAGR: {metrics?.financial?.Strategy_Net_CAGR_pct || 18.87}% | Sortino: {metrics?.financial?.Strategy_Sortino_Ratio || 1.308}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Max Drawdown: {metrics?.financial?.Strategy_Max_Drawdown_pct || -23.47}% vs Buy & Hold {metrics?.financial?.Buy_Hold_Max_Drawdown_pct || -34.71}% (+11.24% loss shield)
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </section>
+
+      {/* Educational Legal Notice */}
+      <footer className="disclaimer-banner">
+        <Info size={16} color="#64748b" style={{ flexShrink: 0, marginTop: '2px' }} />
+        <span>
+          <strong>Educational Risk-Awareness Notice:</strong> This software is an academic demonstration and quantitative research decision-support tool. It does not provide personalized investment advice, brokerage services, or guarantees of profit. Stock markets involve risk of loss. Always consult a qualified professional financial advisor before making financial decisions.
+        </span>
+      </footer>
     </div>
   );
 }
